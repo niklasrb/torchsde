@@ -20,6 +20,7 @@ import torch
 from . import adaptive_stepping
 from . import better_abc
 from . import interp
+from . import misc
 from .base_event import BaseEvent
 from .base_sde import BaseSDE
 from .._brownian import BaseBrownian, BrownianInterval
@@ -190,6 +191,15 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
                 midpoint_y, midpoint_extra = self.step(curr_t, midpoint_t, curr_y, curr_extra)
                 next_y, next_extra = self.step(midpoint_t, next_t, midpoint_y, midpoint_extra)
 
+                if misc.is_nan(next_y_full) or misc.is_nan(next_y):
+                    if step_size == self.dt_min:
+                        warnings.warn("Found nans in the integration with minimum stepsize. Terminating Integration")
+                        status = -1
+                        break
+                    warnings.warn("Found nans in the integration.")
+                    step_size = min(step_size/2., self.dt_min)
+                    continue
+
                 # Estimate error based on difference between 1 full step and 2 half steps.
                 with torch.no_grad():
                     error_estimate = adaptive_stepping.compute_error(next_y_full, next_y, self.rtol, self.atol)
@@ -210,7 +220,9 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
                     prev_t, prev_y = curr_t, curr_y
                     curr_t, curr_y, curr_extra = next_t, next_y, next_extra
                     accept_step = True
-            
+
+            if status == -1:
+                break
             # Only add batches that changed, the others stay constant
             ts.append(ts[-1].detach().clone())
             ys.append(ys[-1].detach().clone())
