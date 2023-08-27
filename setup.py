@@ -32,8 +32,8 @@ with open(os.path.join(here, 'README.md')) as f:
 setuptools.setup(
     name="torchsde",
     version=version,
-    author="Xuechen Li",
-    author_email="lxuechen@cs.toronto.edu",
+    author="Xuechen Li, Patrick Kidger",
+    author_email="lxuechen@cs.stanford.edu, hello@kidger.site",
     description="SDE solvers and stochastic adjoint sensitivity analysis in PyTorch.",
     long_description=readme,
     long_description_content_type="text/markdown",
@@ -41,9 +41,9 @@ setuptools.setup(
     packages=setuptools.find_packages(exclude=['benchmarks', 'diagnostics', 'examples', 'tests']),
     install_requires=[
         "boltons>=20.2.1",
-        "numpy==1.19.*;python_version<'3.7'",
-        "numpy>=1.19.*;python_version>='3.7'",
-        "scipy==1.5.*;python_version<'3.7'",
+        "numpy==1.19;python_version<'3.7'",
+        "numpy>=1.19;python_version>='3.7'",
+        "scipy==1.5;python_version<'3.7'",
         "scipy>=1.5;python_version>='3.7'",
         "torch>=1.6.0",
         "trampoline>=0.1.2",
