@@ -165,10 +165,9 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
             events, where the considered events are returned
             extra_solver_state, which is a tuple of Tensors of shape (T, ...), where ... is arbitrary and
                 solver-dependent.
-        """                
+        """
         batch_size = y0.shape[0]
         evolved_batches = torch.arange(batch_size)
-        step_size = self.dt
 
         prev_t = curr_t = tspan[0]
         prev_y = curr_y = y0
@@ -177,13 +176,14 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
         ys = [y0]
         ts = [ torch.Tensor([tspan[0]]*batch_size) ]
         prev_error_ratio = None
-        
+        self.i = 0
+
         status = 0
         while status == 0:
-            
+
             accept_step = False
             while not accept_step:
-                next_t = min(curr_t + step_size, tspan[-1])
+                next_t = min(curr_t + self.dt, tspan[-1])
                 # Take 1 full step.
                 next_y_full, _ = self.step(curr_t, next_t, curr_y, curr_extra)
                 # Take 2 half steps.
@@ -192,31 +192,34 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
                 next_y, next_extra = self.step(midpoint_t, next_t, midpoint_y, midpoint_extra)
 
                 if misc.is_nan(next_y_full) or misc.is_nan(next_y):
-                    if step_size == self.dt_min:
+                    if self.dt == self.dt_min or not self.adaptive:
                         warnings.warn("Found nans in the integration with minimum stepsize. Terminating Integration")
                         status = -1
                         break
                     warnings.warn("Found nans in the integration.")
-                    step_size = min(step_size/2., self.dt_min)
+                    self.dt = min(self.dt/2., self.dt_min)
                     continue
 
                 # Estimate error based on difference between 1 full step and 2 half steps.
                 with torch.no_grad():
-                    error_estimate = adaptive_stepping.compute_error(next_y_full, next_y, self.rtol, self.atol)
-                    step_size, prev_error_ratio = adaptive_stepping.update_step_size(
-                        error_estimate=error_estimate,
-                        prev_step_size=step_size,
-                        prev_error_ratio=prev_error_ratio,
-                        safety=1.
-                    )
+                    self.error_estimate = adaptive_stepping.compute_error(next_y_full, next_y, self.rtol, self.atol)
+                    if self.adaptive:
+                            self.dt, prev_error_ratio = adaptive_stepping.update_step_size(
+                                error_estimate=self.error_estimate,
+                                prev_step_size=self.dt,
+                                prev_error_ratio=prev_error_ratio
+                            )
+                    else:
+                        if self.error_estimate > 1.:
+                            warnings.warn("Large errors with given stepsize. Consider lowering stepsize or making it adaptive.")
 
-                if step_size < self.dt_min:
+                if self.dt < self.dt_min:
                     warnings.warn("Hitting minimum allowed step size in adaptive time-stepping.")
-                    step_size = self.dt_min
+                    self.dt = self.dt_min
                     prev_error_ratio = None
 
                 # Accept step.
-                if error_estimate <= 1 or step_size <= self.dt_min:
+                if self.error_estimate <= 1 or self.dt <= self.dt_min or not self.adaptive:
                     prev_t, prev_y = curr_t, curr_y
                     curr_t, curr_y, curr_extra = next_t, next_y, next_extra
                     accept_step = True
@@ -228,6 +231,7 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
             ys.append(ys[-1].detach().clone())
             ts[-1][evolved_batches] = curr_t
             ys[-1][evolved_batches] = curr_y
+            self.i += 1
 
             # Handle Events
             terminate_batches = []
@@ -235,24 +239,24 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
                 if not event.terminal:
                     event.step_accepted(self, evolved_batches, curr_t, curr_y, prev_t, prev_y)
                     continue
-                
+
                 terminate = event.step_accepted(self, evolved_batches, curr_t, curr_y, prev_t, prev_y)
-                
+
                 if terminate is not None and len(terminate) > 0:
                     for tb in terminate:
                         terminate_batches.append(tb)
-            
+
             # Reduce active batch size if needed
             if len(terminate_batches) > 0:
                 terminate_batches = list(set(terminate_batches))
                 for tb in terminate_batches:
                     evolved_batches = evolved_batches[evolved_batches != tb]
-                
+
                 new_batch_size = len(evolved_batches)
                 if new_batch_size == 0:
                     status = 2
                     continue
-                
+
                 # reduce brownian motion size
                 bm_size = self.bm._size
                 new_bm_size = (new_batch_size, *bm_size[1:])
@@ -268,12 +272,12 @@ class BaseSDESolver(metaclass=better_abc.ABCMeta):
                                             cache_size = self.bm._cache_size,
                                             halfway_tree = self.bm._halfway_tree,
                                             levy_area_approximation = self.bm._levy_area_approximation)
-                        
-            
+
+
             curr_y = ys[-1][evolved_batches]
 
             if status == 0 and curr_t >= tspan[-1]:
-                status = 1 
+                status = 1
 
 
         return torch.stack(ts, dim=0), torch.stack(ys, dim=0), events,  curr_extra

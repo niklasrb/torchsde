@@ -18,7 +18,7 @@ from ._core.adjoint import sdeint_adjoint
 from ._core.base_sde import BaseSDE, SDEIto, SDEStratonovich
 from ._core.sdeint import sdeint
 from ._core.solve_sde import solve_sde
-from ._core.base_event import BaseEvent, HitTargetEvent
+from ._core.base_event import BaseEvent, HitTargetEvent, VerboseEvent
 
 BrownianInterval.__init__.__annotations__ = {}
 BrownianPath.__init__.__annotations__ = {}

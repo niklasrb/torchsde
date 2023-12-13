@@ -34,6 +34,7 @@ def solve_sde(sde,
            rtol: Scalar = 1e-5,
            atol: Scalar = 1e-4,
            dt_min: Scalar = 1e-3,
+           adaptive = True,
            options: Optional[Dict[str, Any]] = None,
            names: Optional[Dict[str, str]] = None,
            logqp: bool = False,
@@ -93,7 +94,7 @@ def solve_sde(sde,
     misc.handle_unused_kwargs(unused_kwargs, msg="`solve_sde`")
     del unused_kwargs
 
-    sde, y0, tspan, bm, method, events, options = check_contract(sde, y0, tspan, bm, method, events, adaptive=True, options=options, names=names, logqp=logqp)
+    sde, y0, tspan, bm, method, events, options = check_contract(sde, y0, tspan, bm, method, events, adaptive=adaptive, options=options, names=names, logqp=logqp)
     misc.assert_no_grad(['tspan', 'dt', 'rtol', 'atol', 'dt_min'],
                         [tspan, dt, rtol, atol, dt_min])
 
@@ -102,7 +103,7 @@ def solve_sde(sde,
         sde=sde,
         bm=bm,
         dt=dt,
-        adaptive=True,
+        adaptive=adaptive,
         rtol=rtol,
         atol=atol,
         dt_min=dt_min,
@@ -116,18 +117,18 @@ def solve_sde(sde,
 
 
 def check_contract(sde, y0, tspan, bm, method, events, adaptive, options, names, logqp):
-    
+
     sde, y0, tspan, bm, method, options = sdeint.check_contract(sde, y0, tspan, bm, method, adaptive, options, names, logqp)
 
     if len(tspan) >2:
         warnings.warn("len(tspan) = {len(tspan)} > 2: Only the first and last element of tspan will be considered and time steps are returned adaptively.")
-    
+
     if events is None:
         events = []
     for event in events:
         if not hasattr(event, 'step_accepted') or not hasattr(event, 'terminal'):
             raise ValueError("Invalid event: {event} missing 'step_accepted' or 'terminal' attributes.")
-    
+
 
     return sde, y0, tspan, bm, method, events, options
 
